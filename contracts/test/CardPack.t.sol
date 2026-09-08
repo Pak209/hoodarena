@@ -41,7 +41,8 @@ contract CardPackTest is Test {
         vm.prank(who);
         pack.commit(packId, ch);
 
-        vm.roll(block.number + pack.revealDelay());
+        // past unlockBlock so blockhash(unlock) is non-zero
+        vm.roll(block.number + pack.revealDelay() + 1);
 
         vm.prank(who);
         tokenIds = pack.reveal(packId, secret, salt);
@@ -59,7 +60,7 @@ contract CardPackTest is Test {
         assertEq(usdg.balanceOf(address(pack)), price - fee);
         assertEq(usdg.balanceOf(buyer), 1_000e6 - price);
 
-        (address b, CardPack.PackStatus st,,,) = pack.packs(packId);
+        (address b, CardPack.PackStatus st,,,,,,) = pack.packs(packId);
         assertEq(b, buyer);
         assertEq(uint8(st), uint8(CardPack.PackStatus.Purchased));
     }
@@ -67,7 +68,7 @@ contract CardPackTest is Test {
     function test_commitReveal_mintsFiveCards() public {
         (uint256 packId, uint256[5] memory ids) = _buyCommitReveal(buyer);
 
-        (, CardPack.PackStatus st,,,) = pack.packs(packId);
+        (, CardPack.PackStatus st,,,,,,) = pack.packs(packId);
         assertEq(uint8(st), uint8(CardPack.PackStatus.Opened));
         assertEq(cards.balanceOf(buyer), 5);
 
@@ -169,7 +170,8 @@ contract CardPackTest is Test {
         bytes32 ch = pack.commitHashOf(secret, salt, packId, buyer);
         vm.prank(buyer);
         pack.commit(packId, ch);
-        vm.roll(block.number + 1);
+        (, , , , uint64 unlock,,,) = pack.packs(packId);
+        vm.roll(uint256(unlock) + 1);
 
         vm.prank(buyer);
         vm.expectRevert(CardPack.BadCommit.selector);
@@ -189,7 +191,8 @@ contract CardPackTest is Test {
 
         vm.prank(buyer);
         pack.commit(packId, ch);
-        vm.roll(block.number + 1);
+        (, , , , uint64 unlock2,,,) = pack.packs(packId);
+        vm.roll(uint256(unlock2) + 1);
 
         vm.prank(other);
         vm.expectRevert(CardPack.NotBuyer.selector);
@@ -229,7 +232,7 @@ contract CardPackTest is Test {
         vm.roll(block.number + pack.revealDelay() + pack.abandonWindow());
         pack.abandon(packId);
 
-        (, CardPack.PackStatus st,,,) = pack.packs(packId);
+        (, CardPack.PackStatus st,,,,,,) = pack.packs(packId);
         assertEq(uint8(st), uint8(CardPack.PackStatus.Abandoned));
         assertEq(cards.balanceOf(buyer), 0);
     }
@@ -246,6 +249,63 @@ contract CardPackTest is Test {
 
         vm.expectRevert(CardPack.TooEarly.selector);
         pack.abandon(packId);
+    }
+
+    function test_A1_reveal_revertsWhenBlockhashExpired() public {
+        vm.prank(buyer);
+        uint256 packId = pack.buyPack();
+        bytes32 secret = bytes32(uint256(1));
+        bytes32 salt = bytes32(uint256(2));
+        bytes32 ch = pack.commitHashOf(secret, salt, packId, buyer);
+        vm.prank(buyer);
+        pack.commit(packId, ch);
+
+        (, , , , uint64 unlock, uint64 abandonAt,,) = pack.packs(packId);
+        // past 256-blockhash window for unlock
+        vm.roll(uint256(unlock) + 257);
+        vm.prank(buyer);
+        vm.expectRevert(CardPack.EntropyExpired.selector);
+        pack.reveal(packId, secret, salt);
+
+        // abandon allowed at/after abandonBlock
+        if (block.number < abandonAt) vm.roll(abandonAt);
+        pack.abandon(packId);
+        (, CardPack.PackStatus st,,,,,,) = pack.packs(packId);
+        assertEq(uint8(st), uint8(CardPack.PackStatus.Abandoned));
+    }
+
+    function test_A1_commitSnapshotsIgnoreLaterParamChange() public {
+        vm.prank(buyer);
+        uint256 packId = pack.buyPack();
+        bytes32 secret = keccak256("secret");
+        bytes32 salt = keccak256("salt");
+        bytes32 ch = pack.commitHashOf(secret, salt, packId, buyer);
+        vm.prank(buyer);
+        pack.commit(packId, ch);
+        (, , , , uint64 unlock,,,) = pack.packs(packId);
+
+        // owner tries to stretch delay after commit — must not affect this pack
+        pack.setRevealParams(100, 100);
+        vm.roll(uint256(unlock) + 1);
+        vm.prank(buyer);
+        uint256[5] memory ids = pack.reveal(packId, secret, salt);
+        assertEq(cards.ownerOf(ids[0]), buyer);
+    }
+
+    function test_buyAndCommit_atomic() public {
+        bytes32 secret = keccak256("s");
+        bytes32 salt = keccak256("t");
+        // packId will be 1
+        bytes32 ch = pack.commitHashOf(secret, salt, 1, buyer);
+        vm.prank(buyer);
+        uint256 packId = pack.buyAndCommit(ch);
+        assertEq(packId, 1);
+        (, CardPack.PackStatus st,,,,,,) = pack.packs(packId);
+        assertEq(uint8(st), uint8(CardPack.PackStatus.Committed));
+        vm.roll(block.number + pack.revealDelay() + 1);
+        vm.prank(buyer);
+        pack.reveal(packId, secret, salt);
+        assertEq(cards.balanceOf(buyer), 5);
     }
 
     function test_feeBps_constantIs100() public {

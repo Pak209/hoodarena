@@ -14,9 +14,13 @@ import {PlayerCard} from "./PlayerCard.sol";
 ///   seed = keccak256(secret, salt, packId, blockhash(commitBlock + revealDelay))
 /// Opener chooses secret before seeing the reveal-block hash (commit first).
 /// Bias remaining: (1) opener may abandon reveal if seed is "bad" (mitigated by
-/// `abandonWindow` after which anyone can burn unrevealed pack — no refund);
+/// snapshotted `abandonBlock` after which anyone can burn unrevealed pack — no refund);
 /// (2) validators who can influence blockhash within delay — documented; prefer
 /// Chainlink VRF when available on RH. Not VRF-grade fairness.
+/// A1: if `blockhash(unlockBlock)==0` reveal REVERTS (no prevrandao fallback) — buyer must abandon.
+/// A1: revealDelay/abandonWindow snapshotted onto Pack at commit (absolute unlock/abandon blocks).
+/// MEDIUM: prefer `buyAndCommit`; Purchased-only packs refundable after `purchaseRefundBlocks`.
+/// Minter: PlayerCard should list only this CardPack as minter before any broadcast.
 /// §12c rarity weights are **per position** (bps/10_000); see rarityWeights(pos).
 /// LIVE LOCKED for mainnet broadcast; dry/testnet OK.
 contract CardPack {
@@ -38,8 +42,9 @@ contract CardPack {
 
     address public owner;
     uint256 public packPrice;
-    uint64 public revealDelay; // blocks after commit before reveal
-    uint64 public abandonWindow; // blocks after reveal-eligible; then burn (no refund)
+    uint64 public revealDelay; // default for new commits (snapshotted per Pack)
+    uint64 public abandonWindow; // default for new commits (snapshotted per Pack)
+    uint64 public purchaseRefundBlocks; // Purchased w/o commit → refund after this many blocks
     uint16 public season;
     bool public paused;
 
@@ -58,6 +63,9 @@ contract CardPack {
         PackStatus status;
         bytes32 commitHash;
         uint64 commitBlock;
+        uint64 unlockBlock; // commitBlock + revealDelay snapshotted at commit
+        uint64 abandonBlock; // unlockBlock + abandonWindow snapshotted at commit
+        uint64 purchasedBlock; // set on buy; used for Purchased-only refund
         uint256 paid;
     }
 
@@ -80,8 +88,10 @@ contract CardPack {
     error NotBuyer();
     error BadCommit();
     error TooEarly();
+    error EntropyExpired(); // blockhash(unlockBlock)==0 — reveal past 256-window; abandon only
     error TransferFailed();
     error Reentrancy();
+    error RefundTooEarly();
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event PackPriceSet(uint256 price);
@@ -91,9 +101,17 @@ contract CardPack {
     event RosterNameSet(uint8 index, string name);
     event PausedSet(bool paused);
     event PackPurchased(uint256 indexed packId, address indexed buyer, uint256 price, uint256 fee);
-    event PackCommitted(uint256 indexed packId, bytes32 commitHash, uint64 commitBlock);
+    event PackCommitted(
+        uint256 indexed packId,
+        bytes32 commitHash,
+        uint64 commitBlock,
+        uint64 unlockBlock,
+        uint64 abandonBlock
+    );
     event PackOpened(uint256 indexed packId, address indexed buyer, uint256[5] tokenIds, bytes32 seed);
     event PackAbandoned(uint256 indexed packId);
+    event PackRefunded(uint256 indexed packId, address indexed buyer, uint256 amount);
+    event PurchaseRefundBlocksSet(uint64 blocks);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -122,7 +140,8 @@ contract CardPack {
         owner = msg.sender;
         packPrice = DEFAULT_PACK_PRICE;
         revealDelay = 1; // 1 block for testnet/dry; raise for production
-        abandonWindow = 256; // ~blockhash availability window
+        abandonWindow = 256; // keep unlock within blockhash window (~256)
+        purchaseRefundBlocks = 7200; // ~1 day @ 12s; Purchased w/o commit refund
         season = season_;
         baseUri = "/art/";
         // Kit AF reissue (2026-09-07) — no NFL IP
@@ -139,6 +158,7 @@ contract CardPack {
         emit OwnershipTransferred(address(0), msg.sender);
         emit PackPriceSet(packPrice);
         emit RevealParamsSet(revealDelay, abandonWindow);
+        emit PurchaseRefundBlocksSet(purchaseRefundBlocks);
         emit SeasonSet(season_);
     }
 
@@ -156,9 +176,17 @@ contract CardPack {
 
     function setRevealParams(uint64 revealDelay_, uint64 abandonWindow_) external onlyOwner {
         if (revealDelay_ == 0 || abandonWindow_ == 0) revert InvalidDelay();
+        // abandonWindow > 256 is useless: blockhash(unlock) is already 0 by then
+        if (abandonWindow_ > 256) revert InvalidDelay();
         revealDelay = revealDelay_;
         abandonWindow = abandonWindow_;
         emit RevealParamsSet(revealDelay_, abandonWindow_);
+    }
+
+    function setPurchaseRefundBlocks(uint64 blocks_) external onlyOwner {
+        if (blocks_ == 0) revert InvalidDelay();
+        purchaseRefundBlocks = blocks_;
+        emit PurchaseRefundBlocksSet(blocks_);
     }
 
     function setSeason(uint16 season_) external onlyOwner {
@@ -205,12 +233,49 @@ contract CardPack {
             status: PackStatus.Purchased,
             commitHash: bytes32(0),
             commitBlock: 0,
+            unlockBlock: 0,
+            abandonBlock: 0,
+            purchasedBlock: uint64(block.number),
             paid: price
         });
         emit PackPurchased(packId, msg.sender, price, fee);
     }
 
+    /// @notice Atomic buy + commit (preferred — avoids stranded Purchased packs).
+    function buyAndCommit(bytes32 commitHash)
+        external
+        whenNotPaused
+        nonReentrant
+        returns (uint256 packId)
+    {
+        if (commitHash == bytes32(0)) revert BadCommit();
+        uint256 price = packPrice;
+        uint256 fee = (price * FEE_BPS) / BPS_DENOM;
+        if (!usdg.transferFrom(msg.sender, address(this), price)) revert TransferFailed();
+        if (fee > 0) {
+            if (!usdg.transfer(feeRecipient, fee)) revert TransferFailed();
+        }
+
+        packId = nextPackId++;
+        uint64 cb = uint64(block.number);
+        uint64 unlock = cb + uint64(revealDelay);
+        uint64 abandonAt = unlock + uint64(abandonWindow);
+        packs[packId] = Pack({
+            buyer: msg.sender,
+            status: PackStatus.Committed,
+            commitHash: commitHash,
+            commitBlock: cb,
+            unlockBlock: unlock,
+            abandonBlock: abandonAt,
+            purchasedBlock: cb,
+            paid: price
+        });
+        emit PackPurchased(packId, msg.sender, price, fee);
+        emit PackCommitted(packId, commitHash, cb, unlock, abandonAt);
+    }
+
     /// @notice Commit `keccak256(abi.encodePacked(secret, salt, packId, buyer))` before reveal.
+    /// @dev Snapshots live revealDelay/abandonWindow into absolute unlock/abandon blocks.
     function commit(uint256 packId, bytes32 commitHash) external whenNotPaused {
         Pack storage p = packs[packId];
         if (p.status == PackStatus.None) revert PackMissing();
@@ -218,10 +283,36 @@ contract CardPack {
         if (p.buyer != msg.sender) revert NotBuyer();
         if (commitHash == bytes32(0)) revert BadCommit();
 
+        uint64 cb = uint64(block.number);
+        uint64 unlock = cb + uint64(revealDelay);
+        uint64 abandonAt = unlock + uint64(abandonWindow);
         p.commitHash = commitHash;
-        p.commitBlock = uint64(block.number);
+        p.commitBlock = cb;
+        p.unlockBlock = unlock;
+        p.abandonBlock = abandonAt;
         p.status = PackStatus.Committed;
-        emit PackCommitted(packId, commitHash, p.commitBlock);
+        emit PackCommitted(packId, commitHash, cb, unlock, abandonAt);
+    }
+
+    /// @notice Refund a Purchased pack that never committed, after `purchaseRefundBlocks`.
+    function refundPurchased(uint256 packId) external nonReentrant {
+        Pack storage p = packs[packId];
+        if (p.status != PackStatus.Purchased) revert BadStatus();
+        if (p.buyer != msg.sender) revert NotBuyer();
+        if (block.number < uint256(p.purchasedBlock) + uint256(purchaseRefundBlocks)) {
+            revert RefundTooEarly();
+        }
+        uint256 amount = p.paid;
+        // fee already sent to treasury on buy — refund only proceeds held here (price - fee)
+        uint256 fee = (amount * FEE_BPS) / BPS_DENOM;
+        uint256 refundAmt = amount - fee;
+        p.status = PackStatus.Abandoned;
+        p.paid = 0;
+        if (refundAmt > 0) {
+            if (!usdg.transfer(msg.sender, refundAmt)) revert TransferFailed();
+        }
+        emit PackRefunded(packId, msg.sender, refundAmt);
+        emit PackAbandoned(packId);
     }
 
     /// @notice Reveal after `revealDelay` blocks; mints `CARDS_PER_PACK` cards to buyer.
@@ -236,19 +327,16 @@ contract CardPack {
         if (p.status != PackStatus.Committed) revert BadStatus();
         if (p.buyer != msg.sender) revert NotBuyer();
 
-        uint256 unlock = uint256(p.commitBlock) + uint256(revealDelay);
-        if (block.number < unlock) revert TooEarly();
+        uint256 unlock = uint256(p.unlockBlock);
+        // blockhash(unlock) is only available AFTER unlock is mined (not on unlock itself)
+        if (block.number <= unlock) revert TooEarly();
 
         bytes32 expected = keccak256(abi.encodePacked(secret, salt, packId, msg.sender));
         if (expected != p.commitHash) revert BadCommit();
 
-        // Entropy from post-commit block (documented: 256-blockhash limit)
+        // A1 HIGH1: only snapshotted unlock blockhash — never prevrandao / n-1 fallback
         bytes32 bh = blockhash(unlock);
-        if (bh == bytes32(0)) {
-            // Too far past unlock — use current prevrandao/block as fallback (weaker; prefer abandon)
-            bh = blockhash(block.number - 1);
-            if (bh == bytes32(0)) bh = bytes32(uint256(block.prevrandao));
-        }
+        if (bh == bytes32(0)) revert EntropyExpired();
 
         bytes32 seed = keccak256(abi.encodePacked(secret, salt, packId, bh));
         p.status = PackStatus.Opened;
@@ -268,12 +356,11 @@ contract CardPack {
         emit PackOpened(packId, p.buyer, tokenIds, seed);
     }
 
-    /// @notice After abandonWindow past unlock, burn unrevealed pack (no refund) — anti cherry-pick.
+    /// @notice After snapshotted abandonBlock, burn unrevealed pack (no refund) — anti cherry-pick / entropy expiry.
     function abandon(uint256 packId) external {
         Pack storage p = packs[packId];
         if (p.status != PackStatus.Committed) revert BadStatus();
-        uint256 unlock = uint256(p.commitBlock) + uint256(revealDelay);
-        if (block.number < unlock + uint256(abandonWindow)) revert TooEarly();
+        if (block.number < uint256(p.abandonBlock)) revert TooEarly();
         p.status = PackStatus.Abandoned;
         emit PackAbandoned(packId);
     }
