@@ -1,0 +1,13 @@
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+web/node_modules/
+web/dist/
+web/.env
+web/.env.local
+web/.env.testnet
+.env
+.env.local
+*.key
+*.mnemonic
+.DS_Store

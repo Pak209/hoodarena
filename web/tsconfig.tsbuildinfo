@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/Header.tsx","./src/components/Icons.tsx","./src/data/mock.ts","./src/lib/config.ts","./src/lib/contracts.ts","./src/lib/wagmi.ts","./src/pages/Home.tsx","./src/pages/How.tsx","./src/pages/Race.tsx","./src/pages/Resolved.tsx","./src/pages/Stake.tsx"],"version":"5.9.3"}
