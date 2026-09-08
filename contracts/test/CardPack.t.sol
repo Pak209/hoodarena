@@ -103,6 +103,20 @@ contract CardPackTest is Test {
         return true;
     }
 
+    function test_tokensOfOwner_listsInventory() public {
+        (, uint256[5] memory ids) = _buyCommitReveal(buyer);
+        uint256[] memory owned = cards.tokensOfOwner(buyer);
+        assertEq(owned.length, 5);
+        // transfer one away — enumeration shrinks
+        vm.prank(buyer);
+        cards.transferFrom(buyer, other, ids[0]);
+        uint256[] memory afterBuyer = cards.tokensOfOwner(buyer);
+        uint256[] memory afterOther = cards.tokensOfOwner(other);
+        assertEq(afterBuyer.length, 4);
+        assertEq(afterOther.length, 1);
+        assertEq(afterOther[0], ids[0]);
+    }
+
     function test_afRosterUri_mapsPositionToKitSlug() public {
         (, uint256[5] memory ids) = _buyCommitReveal(buyer);
         string[5] memory expected = [
@@ -191,11 +205,15 @@ contract CardPackTest is Test {
 
     function test_transferCard() public {
         (, uint256[5] memory ids) = _buyCommitReveal(buyer);
+        assertEq(cards.tokensOfOwner(buyer).length, 5);
         vm.prank(buyer);
         cards.transferFrom(buyer, other, ids[0]);
         assertEq(cards.ownerOf(ids[0]), other);
         assertEq(cards.balanceOf(buyer), 4);
         assertEq(cards.balanceOf(other), 1);
+        assertEq(cards.tokensOfOwner(buyer).length, 4);
+        assertEq(cards.tokensOfOwner(other).length, 1);
+        assertEq(cards.tokensOfOwner(other)[0], ids[0]);
     }
 
     function test_abandon_afterWindow() public {

@@ -6,6 +6,7 @@ import {
   PLAYER_CARD_ADDRESS,
   USDG_ADDRESS,
   isLiveCards,
+  isLivePlayerCard,
 } from './config'
 
 export const playerCardAbi = PlayerCardAbi as Abi
@@ -71,4 +72,4 @@ export function prepareBuyPack(amountRaw: bigint): PackBuyPrepare {
   }
 }
 
-export { isLiveCards, PLAYER_CARD_ADDRESS, CARD_PACK_ADDRESS }
+export { isLiveCards, isLivePlayerCard, PLAYER_CARD_ADDRESS, CARD_PACK_ADDRESS }

@@ -2,12 +2,18 @@ import { useMemo, useState } from 'react'
 import { ModeCNav } from '../components/ModeCNav'
 import { MatchPlay } from '../components/MatchPlay'
 import { PreMatchLoadout, type PreMatchLoadoutValue } from '../components/PreMatchLoadout'
-import { mockCards, mockSquadIds } from '../data/mock'
+import { useInventory } from '../lib/useInventory'
+import { useSquadLineup } from '../lib/useSquadLineup'
 
 export function Match() {
+  const { cards, source, address, isLoading } = useInventory()
+  const { lineup: lineupIds } = useSquadLineup(cards, address, source)
   const lineup = useMemo(
-    () => mockSquadIds.map((id) => mockCards.find((c) => c.tokenId === id)!).filter(Boolean),
-    [],
+    () =>
+      lineupIds
+        .map((id) => (id != null ? cards.find((c) => c.tokenId === id) : undefined))
+        .filter((c): c is NonNullable<typeof c> => Boolean(c)),
+    [lineupIds, cards],
   )
   const [loadout, setLoadout] = useState<PreMatchLoadoutValue>({ focus: 'pass', impacts: [] })
 
@@ -22,6 +28,10 @@ export function Match() {
           <p>
             AF soft-rank · drive tick + Skip · focus {loadout.focus.toUpperCase()}
             {loadout.impacts.length ? ` · ${loadout.impacts.length} Impacts` : ''} · no USDG escrow
+            {' · '}
+            <span className={`badge ${source === 'live' ? 'pink' : ''}`}>
+              {source === 'live' ? 'LIVE' : 'MOCK'}
+            </span>
           </p>
         </div>
         <div className="win-hint">
@@ -32,6 +42,8 @@ export function Match() {
           </div>
         </div>
       </div>
+
+      {isLoading ? <p className="muted">Loading squad…</p> : null}
 
       <PreMatchLoadout value={loadout} onChange={setLoadout} />
       <div style={{ marginTop: 12 }}>

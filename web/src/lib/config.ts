@@ -14,13 +14,10 @@ export const FEE_BPS = 100
 
 /** True when live contract addresses are configured; otherwise UI stays on mock data. */
 export const isLiveContracts = Boolean(ARENA_ADDRESS && ARENA_ADDRESS.length === 42)
-/** Mode C packs/cards — mock until Mint publishes testnet addresses. */
-export const isLiveCards = Boolean(
-  PLAYER_CARD_ADDRESS &&
-  PLAYER_CARD_ADDRESS.length === 42 &&
-  CARD_PACK_ADDRESS &&
-  CARD_PACK_ADDRESS.length === 42,
-)
+/** Mode C PlayerCard reads — address alone enables inventory (no buyPack required). */
+export const isLivePlayerCard = Boolean(PLAYER_CARD_ADDRESS && PLAYER_CARD_ADDRESS.length === 42)
+/** Mode C pack writes — need both PlayerCard + CardPack addresses. */
+export const isLiveCards = Boolean(isLivePlayerCard && CARD_PACK_ADDRESS && CARD_PACK_ADDRESS.length === 42)
 
 export const robinhoodChain = {
   id: CHAIN_ID,

@@ -1,5 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useAccount, useConnect, useDisconnect } from 'wagmi'
 import { CHAIN_ID, mockBalance, fmt } from '../data/mock'
+import { shortAddr } from '../lib/inventory'
 import { CoinG } from './Icons'
 
 const arenaLinks = [
@@ -24,6 +26,19 @@ function isActive(pathname: string, to: string) {
 
 export function Header() {
   const { pathname } = useLocation()
+  const { address, isConnected } = useAccount()
+  const { connect, connectors, isPending } = useConnect()
+  const { disconnect } = useDisconnect()
+  const injected = connectors.find((c) => c.id === 'injected') ?? connectors[0]
+
+  function onWalletClick() {
+    if (isConnected) {
+      disconnect()
+      return
+    }
+    if (injected) connect({ connector: injected })
+  }
+
   return (
     <header className="header">
       <Link to="/" className="logo">
@@ -63,11 +78,16 @@ export function Header() {
         </div>
         <div className="avatar-pill">
           <img src="/art/hood-alpha.png" alt="" className="art-avatar" width={28} height={28} />
-          <span>0xHood…Arena</span>
+          <span>{isConnected && address ? shortAddr(address) : '0xHood…Arena'}</span>
         </div>
-        <button type="button" className="btn-connect">
+        <button
+          type="button"
+          className="btn-connect"
+          onClick={onWalletClick}
+          disabled={isPending && !isConnected}
+        >
           <img src="/icons/wallet.svg" alt="" className="pixel-icon" width={18} height={18} />
-          Connect Wallet
+          {isConnected ? 'Disconnect' : isPending ? 'Connecting…' : 'Connect Wallet'}
         </button>
       </div>
     </header>

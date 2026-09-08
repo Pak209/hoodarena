@@ -57,6 +57,10 @@ contract PlayerCard is IERC721, IERC721Metadata {
     mapping(address => mapping(address => bool)) private _operatorApprovals;
     mapping(uint256 => CardData) private _cards;
 
+    /// @dev Per-owner token enumeration (ERC721Enumerable-lite; no global tokenByIndex).
+    mapping(address => uint256[]) private _ownedTokens;
+    mapping(uint256 => uint256) private _ownedTokensIndex;
+
     error NotOwner();
     error NotMinter();
     error InvalidAddress();
@@ -117,6 +121,7 @@ contract PlayerCard is IERC721, IERC721Metadata {
         tokenId = nextTokenId++;
         _owners[tokenId] = to;
         _balances[to] += 1;
+        _addTokenToOwnerEnumeration(to, tokenId);
         _cards[tokenId] = CardData({
             name: playerName,
             uri: uri,
@@ -137,6 +142,18 @@ contract PlayerCard is IERC721, IERC721Metadata {
     function getCard(uint256 tokenId) external view returns (CardData memory) {
         if (_owners[tokenId] == address(0)) revert TokenMissing();
         return _cards[tokenId];
+    }
+
+    /// @notice List all token ids owned by `account` (order not guaranteed stable across transfers).
+    function tokensOfOwner(address account) external view returns (uint256[] memory) {
+        if (account == address(0)) revert InvalidAddress();
+        return _ownedTokens[account];
+    }
+
+    function tokenOfOwnerByIndex(address account, uint256 index) external view returns (uint256) {
+        if (account == address(0)) revert InvalidAddress();
+        if (index >= _ownedTokens[account].length) revert TokenMissing();
+        return _ownedTokens[account][index];
     }
 
     function ratingsOf(uint256 tokenId) external view returns (uint8[5] memory out) {
@@ -225,9 +242,28 @@ contract PlayerCard is IERC721, IERC721Metadata {
             revert NotApproved();
         }
         delete _tokenApprovals[tokenId];
+        _removeTokenFromOwnerEnumeration(from, tokenId);
         _balances[from] -= 1;
+        _addTokenToOwnerEnumeration(to, tokenId);
         _balances[to] += 1;
         _owners[tokenId] = to;
         emit Transfer(from, to, tokenId);
+    }
+
+    function _addTokenToOwnerEnumeration(address to, uint256 tokenId) private {
+        _ownedTokensIndex[tokenId] = _ownedTokens[to].length;
+        _ownedTokens[to].push(tokenId);
+    }
+
+    function _removeTokenFromOwnerEnumeration(address from, uint256 tokenId) private {
+        uint256 lastIndex = _ownedTokens[from].length - 1;
+        uint256 tokenIndex = _ownedTokensIndex[tokenId];
+        if (tokenIndex != lastIndex) {
+            uint256 lastTokenId = _ownedTokens[from][lastIndex];
+            _ownedTokens[from][tokenIndex] = lastTokenId;
+            _ownedTokensIndex[lastTokenId] = tokenIndex;
+        }
+        _ownedTokens[from].pop();
+        delete _ownedTokensIndex[tokenId];
     }
 }
