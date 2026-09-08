@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ModeCNav } from '../components/ModeCNav'
+import { PackOdds } from '../components/PackOdds'
 import { mockPack, fmt } from '../data/mock'
 import { prepareBuyPack, isLiveCards } from '../lib/cards'
 import { parseUnits } from 'viem'
@@ -82,6 +83,10 @@ export function Packs() {
           )}
         </div>
       </article>
+
+      <div style={{ marginTop: 16 }}>
+        <PackOdds />
+      </div>
     </div>
   )
 }

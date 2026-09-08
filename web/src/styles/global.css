@@ -1338,16 +1338,25 @@ code {
 .player-card.rarity-epic { border-color: var(--purple); box-shadow: var(--glow-purple); }
 .player-card.rarity-legend { border-color: var(--gold); box-shadow: 0 0 18px rgba(212, 175, 55, 0.35); }
 .pc-frame {
+  /* Kit frames are 1536×1024 (3:2). Portrait 3:4 + object-fit:fill squashed chrome over the window. */
   position: relative;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 3 / 2;
   background: #0a0a0a;
-  display: grid;
-  place-items: center;
+  overflow: hidden;
 }
 .pc-art {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  /* Sit in the transparent frame window (landscape chrome). */
+  left: 16%;
+  right: 16%;
+  top: 12%;
+  bottom: 16%;
+  width: auto;
+  height: auto;
   object-fit: cover;
+  object-position: center top;
+  z-index: 1;
+  display: block;
 }
 .pc-frame-overlay {
   position: absolute;
@@ -1747,3 +1756,27 @@ code {
   display: block;
   image-rendering: auto;
 }
+
+/* ——— Mode C pack odds sheet (§12c) ——— */
+.pack-odds { padding: 1rem 1.15rem 1.15rem; margin-top: 0.25rem; }
+.odds-table-wrap { overflow-x: auto; }
+.odds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.odds-table th,
+.odds-table td {
+  border-top: 1px solid var(--border);
+  padding: 0.55rem 0.45rem;
+  text-align: left;
+  vertical-align: top;
+}
+.odds-table th {
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.odds-table td:first-child,
+.odds-table th:first-child { min-width: 5.5rem; }

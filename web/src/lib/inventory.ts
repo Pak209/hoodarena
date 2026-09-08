@@ -42,6 +42,11 @@ export function resolveCardArt(uri: string, name: string): { art: string; slug: 
 
   if (!trimmed) return { art: FALLBACK_ART, slug: nameSlug }
 
+  // Mint baseUri alone (e.g. `/art/`) — build Kit path from name slug
+  if (trimmed.replace(/\/+$/, '') === '/art') {
+    return { art: `/art/player-${nameSlug}.png`, slug: nameSlug }
+  }
+
   const playerMatch = trimmed.match(/player-([a-z0-9-]+)\.png/i)
   if (playerMatch) {
     const art = trimmed.startsWith('http')
