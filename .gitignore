@@ -11,3 +11,5 @@ web/.env.testnet
 *.key
 *.mnemonic
 .DS_Store
+__pycache__/
+*.pyc
