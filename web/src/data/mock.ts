@@ -130,6 +130,7 @@ export interface PlayerCardItem {
   /** Art path — Kit AF rasters */
   art: string
   frame: string
+  foil: string
   slug: string
 }
 
@@ -167,8 +168,9 @@ export const mockCards: PlayerCardItem[] = [
     rarity: 'Rare',
     season: 1,
     ratings: { spd: 72, arm: 88, hnd: 70, tck: 38, pow: 64 },
-    art: '/art/player-neon-arm.png',
+    art: '/art/player-neon-arm-rare.png',
     frame: '/art/frame-rare.png',
+    foil: '/art/foil-rare.png',
   },
   {
     tokenId: 2,
@@ -178,8 +180,9 @@ export const mockCards: PlayerCardItem[] = [
     rarity: 'Common',
     season: 1,
     ratings: { spd: 90, arm: 42, hnd: 84, tck: 40, pow: 68 },
-    art: '/art/player-chain-slash.png',
+    art: '/art/player-chain-slash-common.png',
     frame: '/art/frame-common.png',
+    foil: '/art/foil-common.png',
   },
   {
     tokenId: 3,
@@ -189,8 +192,9 @@ export const mockCards: PlayerCardItem[] = [
     rarity: 'Epic',
     season: 1,
     ratings: { spd: 55, arm: 30, hnd: 62, tck: 78, pow: 92 },
-    art: '/art/player-vault-wall.png',
+    art: '/art/player-vault-wall-epic.png',
     frame: '/art/frame-epic.png',
+    foil: '/art/foil-epic.png',
   },
   {
     tokenId: 4,
@@ -200,8 +204,9 @@ export const mockCards: PlayerCardItem[] = [
     rarity: 'Legend',
     season: 1,
     ratings: { spd: 68, arm: 28, hnd: 48, tck: 90, pow: 88 },
-    art: '/art/player-rh-rush.png',
+    art: '/art/player-rh-rush-legend.png',
     frame: '/art/frame-legend.png',
+    foil: '/art/foil-legend.png',
   },
   {
     tokenId: 5,
@@ -211,8 +216,9 @@ export const mockCards: PlayerCardItem[] = [
     rarity: 'Rare',
     season: 1,
     ratings: { spd: 91, arm: 35, hnd: 74, tck: 82, pow: 60 },
-    art: '/art/player-street-pick.png',
+    art: '/art/player-street-pick-rare.png',
     frame: '/art/frame-rare.png',
+    foil: '/art/foil-rare.png',
   },
 ]
 

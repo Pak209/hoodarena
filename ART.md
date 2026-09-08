@@ -73,3 +73,27 @@ Mode C icons: `pack.svg`, `rarity-{common,rare,epic,legend}.svg` in `web/public/
 ## React sprites (`Icons.tsx`)
 
 Inline SVG helpers still used where convenient (`CoinG`, `SocialIcon`, `PixelAlien`, etc.). Prefer public SVG/PNG assets for page-visible art so the Grok + SVG workflow stays file-based.
+
+## Mode C AF sprites (2026-09-08 Kit)
+
+Pixel gameplay sprite sheets (4-frame horizontal strips) under `web/public/art/sprites/{slug}/`:
+
+| Slug | Files |
+|------|-------|
+| `neon-arm` | `idle.png` `run.png` `action.png` `celebrate.png` |
+| `chain-slash` | same |
+| `vault-wall` | same |
+| `rh-rush` | same |
+| `street-pick` | same |
+
+Style: hooded XX-eyes mascot pixel (not voxel); no NFL IP. Wire target for Pitch/Stage match FX.
+
+
+## Mode C rarity foils (A7 — 2026-09-08 Kit)
+
+Overlays: `foil-{common,rare,epic,legend}.png`
+
+Per-slug chrome variants (Spec §12c): `player-{slug}-{common|rare|epic|legend}.png` for
+`neon-arm` · `chain-slash` · `vault-wall` · `rh-rush` · `street-pick` (20 files).
+Built as stronger frame + foil overlay on base player art.
+

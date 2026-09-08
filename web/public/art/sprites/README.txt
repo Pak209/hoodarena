@@ -17,3 +17,6 @@ CSS math (MatchPlay / SpriteActor):
   background-position: -N*96px 0   (N = frame index)
 
 Until PNGs land, MatchPlay falls back to card static portrait art.
+
+Note: Kit may stage per-frame sources under {slug}/{idle,run,action,celebrate}.png.
+Runtime MatchPlay only loads the flat strip path: {slug}.png (384×96).

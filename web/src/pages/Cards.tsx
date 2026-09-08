@@ -76,15 +76,28 @@ export function Cards() {
           {cards.map((c) => (
             <article key={c.tokenId} className={`player-card ${rarityClass[c.rarity]}`}>
               <div className="pc-frame">
+                <img src={c.frame} alt="" className="pc-frame-overlay" />
                 <img
                   src={c.art}
                   alt=""
                   className="pc-art"
+                  data-fallback={`/art/player-${c.slug}.png`}
                   onError={(e) => {
-                    ;(e.target as HTMLImageElement).src = '/art/hood-alpha.png'
+                    const el = e.target as HTMLImageElement
+                    const fb = el.dataset.fallback
+                    if (fb && !el.dataset.fell && el.src.indexOf(fb) === -1) {
+                      el.dataset.fell = '1'
+                      el.src = fb
+                      return
+                    }
+                    el.src = '/art/hood-alpha.png'
                   }}
                 />
-                <img src={c.frame} alt="" className="pc-frame-overlay" />
+                <img
+                  src={c.foil}
+                  alt=""
+                  className={`pc-foil rarity-${c.rarity.toLowerCase()}`}
+                />
                 <div className="pc-ovr pixel">{cardOverall(c)}</div>
               </div>
               <div className="pc-body">

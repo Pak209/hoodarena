@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html><head><style>
+body{background:#0d0d0d;margin:2rem;font-family:sans-serif;color:#fff}
+.grid{display:flex;gap:1rem}
+.pc-frame{position:relative;aspect-ratio:3/2;width:280px;background:#0a0a0a;overflow:hidden;border:1px solid #333}
+.pc-frame-overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:1;pointer-events:none}
+.pc-art{position:absolute;left:17%;top:13%;width:66%;height:69%;object-fit:cover;object-position:center top;z-index:2;display:block;background:red}
+.pc-art-bg{position:absolute;left:17%;top:13%;width:66%;height:69%;z-index:2;background-size:cover;background-position:center top}
+</style></head><body>
+<p>Test A: img with explicit % size</p>
+<div class="grid">
+<div class="pc-frame">
+  <img class="pc-frame-overlay" src="/art/frame-rare.png"/>
+  <img class="pc-art" src="/art/player-neon-arm.png"/>
+</div>
+<div class="pc-frame">
+  <img class="pc-frame-overlay" src="/art/frame-epic.png"/>
+  <div class="pc-art-bg" style="background-image:url(/art/player-vault-wall.png)"></div>
+</div>
+</div>
+</body></html>

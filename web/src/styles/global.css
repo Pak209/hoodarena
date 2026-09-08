@@ -1338,25 +1338,11 @@ code {
 .player-card.rarity-epic { border-color: var(--purple); box-shadow: var(--glow-purple); }
 .player-card.rarity-legend { border-color: var(--gold); box-shadow: 0 0 18px rgba(212, 175, 55, 0.35); }
 .pc-frame {
-  /* Kit frames are 1536×1024 (3:2). Portrait 3:4 + object-fit:fill squashed chrome over the window. */
+  /* Kit frames are 1536×1024 RGB (no alpha) — center is opaque black, not a cutout. */
   position: relative;
   aspect-ratio: 3 / 2;
   background: #0a0a0a;
   overflow: hidden;
-}
-.pc-art {
-  position: absolute;
-  /* Sit in the transparent frame window (landscape chrome). */
-  left: 16%;
-  right: 16%;
-  top: 12%;
-  bottom: 16%;
-  width: auto;
-  height: auto;
-  object-fit: cover;
-  object-position: center top;
-  z-index: 1;
-  display: block;
 }
 .pc-frame-overlay {
   position: absolute;
@@ -1365,8 +1351,39 @@ code {
   height: 100%;
   object-fit: fill;
   pointer-events: none;
-  z-index: 2;
+  z-index: 1; /* chrome under art */
 }
+.pc-art {
+  position: absolute;
+  /* Explicit size — left+right+width:auto on <img> collapses to 0 in Chromium */
+  left: 17%;
+  top: 13%;
+  width: 66%;
+  height: 69%;
+  object-fit: cover;
+  object-position: center top;
+  z-index: 2; /* ABOVE opaque frame fill */
+  display: block;
+  border-radius: 2px;
+}
+.pc-foil {
+  position: absolute;
+  left: 17%;
+  top: 13%;
+  width: 66%;
+  height: 69%;
+  object-fit: cover;
+  object-position: center top;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0.35;
+  border-radius: 2px;
+}
+.pc-foil.rarity-common { opacity: 0.18; }
+.pc-foil.rarity-rare { opacity: 0.32; }
+.pc-foil.rarity-epic { opacity: 0.48; }
+.pc-foil.rarity-legend { opacity: 0.62; filter: saturate(1.15); }
 .pc-ovr {
   position: absolute;
   top: 8px;
@@ -1376,7 +1393,7 @@ code {
   color: var(--lime);
   padding: 4px 6px;
   font-size: 11px;
-  z-index: 3;
+  z-index: 4;
 }
 .pc-body { padding: 0.75rem 0.85rem 1rem; }
 .pc-name {

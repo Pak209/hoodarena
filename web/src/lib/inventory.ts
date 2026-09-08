@@ -29,10 +29,17 @@ const FRAME: Record<CardRarity, string> = {
   Legend: '/art/frame-legend.png',
 }
 
+const FOIL: Record<CardRarity, string> = {
+  Common: '/art/foil-common.png',
+  Rare: '/art/foil-rare.png',
+  Epic: '/art/foil-epic.png',
+  Legend: '/art/foil-legend.png',
+}
+
 const FALLBACK_ART = '/art/hood-alpha.png'
 
 /** Resolve Kit art from on-chain uri / slug; fall back to hood-alpha. */
-export function resolveCardArt(uri: string, name: string): { art: string; slug: string } {
+export function resolveCardArt(uri: string, name: string, rarity?: CardRarity): { art: string; slug: string } {
   const trimmed = (uri || '').trim()
   const nameSlug =
     name
@@ -69,10 +76,19 @@ export function resolveCardArt(uri: string, name: string): { art: string; slug: 
   return { art: FALLBACK_ART, slug: nameSlug }
 }
 
+
+/** Prefer Kit `player-{slug}-{rarity}.png`; <img onError> can fall back to base slug art. */
+export function preferRarityArt(slug: string, rarity: CardRarity, fallback: string): string {
+  const base = slug.replace(/-(common|rare|epic|legend)$/i, '')
+  if (!base || base === 'unknown') return fallback
+  return `/art/player-${base}-${rarity.toLowerCase()}.png`
+}
+
 export function mapOnChainCard(tokenId: bigint | number, raw: OnChainCardData): PlayerCardItem {
   const rarity = rarityLabel(Number(raw.rarity))
   const position = positionLabel(Number(raw.position)) as CardPosition
-  const { art, slug } = resolveCardArt(raw.uri, raw.name)
+  const resolved = resolveCardArt(raw.uri, raw.name, rarity)
+  const slug = resolved.slug.replace(/-(common|rare|epic|legend)$/i, '')
   return {
     tokenId: Number(tokenId),
     name: raw.name || slug,
@@ -87,8 +103,9 @@ export function mapOnChainCard(tokenId: bigint | number, raw: OnChainCardData): 
       tck: Number(raw.tck),
       pow: Number(raw.pow),
     },
-    art,
+    art: preferRarityArt(slug, rarity, resolved.art),
     frame: FRAME[rarity],
+    foil: FOIL[rarity],
   }
 }
 
