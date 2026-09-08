@@ -253,7 +253,35 @@ contract CardPackTest is Test {
     }
 
     function test_rarityWeights_sum10000() public {
+        // baseline aliases still sum
         assertEq(uint256(pack.W_COMMON()) + pack.W_RARE() + pack.W_EPIC() + pack.W_LEGEND(), 10_000);
+        // §12c every position sums to 10_000
+        for (uint8 pos = 0; pos < 6; pos++) {
+            uint16[4] memory w = pack.rarityWeights(pos);
+            assertEq(uint256(w[0]) + w[1] + w[2] + w[3], 10_000);
+        }
+        // QB juicier Legend, K stingier
+        assertEq(pack.rarityWeights(0)[3], 400);
+        assertEq(pack.rarityWeights(5)[3], 200);
+    }
+
+    function test_positionBias_qbArmHigh_lineDTckHigh() public {
+        (, uint256[5] memory ids) = _buyCommitReveal(buyer);
+        for (uint256 i = 0; i < 5; i++) {
+            PlayerCard.CardData memory c = cards.getCard(ids[i]);
+            uint8 floor_ = 40 + c.rarity * 12;
+            uint8 span = 20 + c.rarity * 4;
+            uint8 mid = floor_ + span / 2;
+            if (c.position == 0) {
+                // QB: ARM + HND should land in high half
+                assertTrue(c.arm >= mid, "QB ARM high tilt");
+                assertTrue(c.hnd >= mid, "QB HND high tilt");
+            }
+            if (c.position == 3) {
+                assertTrue(c.tck >= mid, "LINE_D TCK high tilt");
+                assertTrue(c.pow >= mid, "LINE_D POW high tilt");
+            }
+        }
     }
 
     function test_pausedBlocksBuy() public {

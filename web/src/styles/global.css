@@ -1674,3 +1674,76 @@ code {
   margin-bottom: 4px;
 }
 .impact-chip .pixel-icon { margin-right: 4px; vertical-align: -2px; }
+
+
+/* ——— Kit AF pixel sprites (Mode C MatchPlay) ——— */
+.match-sprite-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  min-height: 112px;
+}
+.match-sprite-caption {
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+.sprite-actor {
+  width: 96px;
+  height: 96px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid rgba(200, 255, 0, 0.35);
+  background: #0a0a0a;
+  box-shadow: 0 0 14px rgba(200, 255, 0, 0.28), 0 0 28px rgba(200, 255, 0, 0.12);
+  flex-shrink: 0;
+}
+.sprite-actor-placeholder {
+  border-color: rgba(255, 0, 127, 0.35);
+  box-shadow: 0 0 12px rgba(255, 0, 127, 0.22);
+}
+.sprite-actor-fallback {
+  border-color: rgba(155, 92, 255, 0.4);
+  box-shadow: 0 0 12px rgba(155, 92, 255, 0.25);
+}
+.sprite-frame {
+  width: 96px;
+  height: 96px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-repeat: no-repeat;
+  /* Sheet: 384×96 · frame N → background-position: -N*96px 0 */
+  background-size: 384px 96px;
+  background-position: 0 0;
+}
+.sprite-frame-muted {
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(ellipse 55% 70% at 50% 60%, rgba(255, 0, 127, 0.25), transparent 70%),
+    linear-gradient(180deg, #1a1a1a, #0d0d0d);
+  position: relative;
+}
+.sprite-frame-muted::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+  height: 48px;
+  border-radius: 40% 40% 35% 35%;
+  background: rgba(255, 0, 127, 0.35);
+  box-shadow: 0 0 10px rgba(255, 0, 127, 0.4);
+}
+.sprite-fallback-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  image-rendering: auto;
+}

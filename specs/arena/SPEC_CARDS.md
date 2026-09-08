@@ -124,6 +124,28 @@ Loot-box / pack RNG can be regulated by jurisdiction. Ship with published odds, 
 
 Research: `/workspace/rh-build/hood-arena/cards-desk/BIG_WIN_FOOTBALL_RESEARCH.md`
 
+
+
+## 12c. Rarity per position LOCKED (Pak 2026-09-07 — finish Mode C)
+Global curve still applies to **each** compressed slot independently so a Legend QB ≠ Common QB.
+
+| Position | Common | Rare | Epic | Legend | Notes |
+|----------|--------|------|------|--------|-------|
+| QB | 5500 | 2700 | 1400 | 400 | Slightly juicier chase (face of franchise) |
+| SKILL | 6000 | 2500 | 1200 | 300 | Baseline (= global) |
+| LINE_O | 6200 | 2400 | 1100 | 300 | Slightly more commons |
+| LINE_D | 6000 | 2500 | 1200 | 300 | Baseline |
+| DB | 5800 | 2600 | 1300 | 300 | Mild chase |
+| K | 6500 | 2300 | 1000 | 200 | Specialist; rarer Legend |
+
+Weights are **bps out of 10_000 per position** (must sum 10_000). Published in UI odds sheet before mainnet; draft OK on testnet.
+
+Rating floors (keep existing shape): `floor = 40 + rarity*12`, `span = 20 + rarity*4` (SPD/ARM/HND/TCK/POW). Position biases which stats get the high rolls (Mint).
+
+Art: Kit delivers rarity chrome variants per slug (`player-{slug}-{common|rare|epic|legend}.png` or frame overlay already — prefer stronger frame + optional foil overlay). Starter pack still guarantees one of each QB…DB (positions distinct); rarity independent per card.
+
+Marketplace: **after** A-table playable (separate Spec later).
+
 ## 13. Still open (defaults if silent)
 | Item | Default until Pak overrides |
 |------|------------------------------|

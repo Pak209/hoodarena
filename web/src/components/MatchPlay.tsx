@@ -5,9 +5,11 @@ import type { PreMatchLoadoutValue } from './PreMatchLoadout'
 import {
   MATCH_HONESTY,
   simulateMatch,
+  type MatchAnim,
   type MatchEvent,
   type MatchResult,
 } from '../lib/matchSim'
+import { SpriteActor } from './SpriteActor'
 
 type Phase = 'idle' | 'playing' | 'done'
 
@@ -112,6 +114,71 @@ export function MatchPlay({ lineup, loadout }: MatchPlayProps) {
       ? '0 Impacts'
       : `${loadout.impacts.length} Impact${loadout.impacts.length === 1 ? '' : 's'}`
 
+  const latest = visible.length ? visible[visible.length - 1]! : null
+
+  function cardBySlug(slug?: string) {
+    if (!slug) return undefined
+    return lineup.find((c) => c.slug === slug)
+  }
+
+  /** Sprite above scoreboard / beside ticker — idle lineup[0], tick actor, or win celebrate */
+  function spriteState(): {
+    slug?: string
+    anim: MatchAnim
+    name?: string
+    fallbackArt?: string
+  } {
+    if (phase === 'idle') {
+      const c = lineup[0]
+      return { slug: c?.slug, anim: 'idle', name: c?.name, fallbackArt: c?.art }
+    }
+
+    if (phase === 'done' && result) {
+      if (result.winner === 'you') {
+        const lastScorer =
+          [...result.events]
+            .reverse()
+            .find((e) => e.actorSlug && e.anim === 'celebrate') ??
+          [...result.events]
+            .reverse()
+            .find((e) => e.side === 'you' && (e.youPts ?? 0) >= 6 && e.actorSlug) ??
+          [...result.events]
+            .reverse()
+            .find((e) => e.side === 'you' && (e.youPts ?? 0) > 0 && e.actorSlug)
+        if (lastScorer?.actorSlug) {
+          const c = cardBySlug(lastScorer.actorSlug)
+          return {
+            slug: lastScorer.actorSlug,
+            anim: 'celebrate',
+            name: c?.name,
+            fallbackArt: c?.art,
+          }
+        }
+      }
+      const c = lineup[0]
+      return { slug: c?.slug, anim: 'idle', name: c?.name, fallbackArt: c?.art }
+    }
+
+    // playing
+    if (latest?.actorSlug) {
+      const c = cardBySlug(latest.actorSlug)
+      return {
+        slug: latest.actorSlug,
+        anim: latest.anim ?? 'idle',
+        name: c?.name,
+        fallbackArt: c?.art,
+      }
+    }
+    // Them / neutral / no actor — muted rival silhouette (no slug)
+    if (latest) {
+      return { anim: latest.anim ?? 'idle' }
+    }
+    const c = lineup[0]
+    return { slug: c?.slug, anim: 'idle', name: c?.name, fallbackArt: c?.art }
+  }
+
+  const sprite = spriteState()
+
   return (
     <article className={`card match-board match-play${phase === 'playing' ? ' is-playing' : ''}`}>
       <div className="match-honesty" role="status">
@@ -164,6 +231,22 @@ export function MatchPlay({ lineup, loadout }: MatchPlayProps) {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="match-sprite-stage" aria-live="polite">
+        <SpriteActor
+          slug={sprite.slug}
+          anim={sprite.anim}
+          name={sprite.name}
+          fallbackArt={sprite.fallbackArt}
+          size={96}
+          playing={phase === 'playing'}
+        />
+        {sprite.name ? (
+          <div className="match-sprite-caption muted">{sprite.name}</div>
+        ) : phase === 'playing' && latest && !latest.actorSlug ? (
+          <div className="match-sprite-caption muted">Neon Rivals</div>
+        ) : null}
       </div>
 
       <div className="match-scoreboard" aria-live="polite">

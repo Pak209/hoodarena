@@ -6,7 +6,7 @@ import {PlayerCard} from "./PlayerCard.sol";
 
 /// @title Hood Arena — Mode C pack sale + commit-reveal open
 /// @notice Buy with USDG (feeBps=100 to treasury), commit, wait delay, reveal → mint AF cards.
-/// @dev Spec: SPEC_CARDS.md §5 + §12b. Matches cosmetic only — never escrows match USDG.
+/// @dev Spec: SPEC_CARDS.md §5 + §12b + §12c. Matches cosmetic only — never escrows match USDG.
 ///      Starter guarantee: each pack mints 5 distinct compressed AF positions (QB..DB) so `/match` is playable immediately (K is pack-random later / optional).
 ///
 /// ## RNG (documented bias)
@@ -17,16 +17,17 @@ import {PlayerCard} from "./PlayerCard.sol";
 /// `abandonWindow` after which anyone can burn unrevealed pack — no refund);
 /// (2) validators who can influence blockhash within delay — documented; prefer
 /// Chainlink VRF when available on RH. Not VRF-grade fairness.
-/// Published rarity weights (out of 10_000): Common 6000, Rare 2500, Epic 1200, Legend 300.
+/// §12c rarity weights are **per position** (bps/10_000); see rarityWeights(pos).
 /// LIVE LOCKED for mainnet broadcast; dry/testnet OK.
 contract CardPack {
     uint16 public constant FEE_BPS = 100; // Spec lock
     uint16 public constant BPS_DENOM = 10_000;
 
+    // §12c SKILL/LINE_D baseline aliases (UI odds sheet) — prefer rarityWeights(pos)
     uint16 public constant W_COMMON = 6000;
     uint16 public constant W_RARE = 2500;
     uint16 public constant W_EPIC = 1200;
-    uint16 public constant W_LEGEND = 300; // sum = 10_000
+    uint16 public constant W_LEGEND = 300;
 
     uint8 public constant CARDS_PER_PACK = 5; // within Spec 3–5
     uint256 public constant DEFAULT_PACK_PRICE = 10e6; // 10 USDG (6 decimals), Spec placeholder
@@ -286,32 +287,99 @@ contract CardPack {
         return keccak256(abi.encodePacked(secret, salt, packId, buyer));
     }
 
+    /// @notice §12c published weights for `position` (Common,Rare,Epic,Legend) — each sums to 10_000.
+    function rarityWeights(uint8 position) public pure returns (uint16[4] memory w) {
+        if (position == 0) {
+            // QB — juicier Legend
+            w = [uint16(5500), 2700, 1400, 400];
+        } else if (position == 1) {
+            // SKILL — baseline
+            w = [uint16(6000), 2500, 1200, 300];
+        } else if (position == 2) {
+            // LINE_O
+            w = [uint16(6200), 2400, 1100, 300];
+        } else if (position == 3) {
+            // LINE_D — baseline
+            w = [uint16(6000), 2500, 1200, 300];
+        } else if (position == 4) {
+            // DB — mild chase
+            w = [uint16(5800), 2600, 1300, 300];
+        } else {
+            // K — stingier Legend
+            w = [uint16(6500), 2300, 1000, 200];
+        }
+    }
+
+    function _rollRarity(bytes32 cardSeed, uint8 position) internal pure returns (uint8 rarity) {
+        uint16[4] memory w = rarityWeights(position);
+        uint256 roll = uint256(cardSeed) % BPS_DENOM;
+        uint256 acc = w[0];
+        if (roll < acc) return 0;
+        acc += w[1];
+        if (roll < acc) return 1;
+        acc += w[2];
+        if (roll < acc) return 2;
+        return 3;
+    }
+
+    /// @dev Position primary stats (SPD ARM HND TCK POW): 2 = high tilt, 1 = mid, 0 = low tilt.
+    function _statTilt(uint8 position) internal pure returns (uint8[5] memory tilt) {
+        if (position == 0) {
+            // QB: ARM HND high; SPD POW mid; TCK low
+            tilt = [uint8(1), 2, 2, 0, 1];
+        } else if (position == 1) {
+            // SKILL: SPD HND high; ARM POW mid; TCK low
+            tilt = [uint8(2), 1, 2, 0, 1];
+        } else if (position == 2) {
+            // LINE_O: POW TCK high; HND mid; SPD ARM low
+            tilt = [uint8(0), 0, 1, 2, 2];
+        } else if (position == 3) {
+            // LINE_D: TCK POW high; SPD mid; ARM HND low
+            tilt = [uint8(1), 0, 0, 2, 2];
+        } else if (position == 4) {
+            // DB: SPD TCK HND high; POW mid; ARM low
+            tilt = [uint8(2), 0, 2, 2, 1];
+        } else {
+            // K: POW HND high; SPD mid; ARM TCK low
+            tilt = [uint8(1), 0, 2, 0, 2];
+        }
+    }
+
     function _mintFromSeed(address to, bytes32 cardSeed, uint8 position)
         internal
         returns (uint256 tokenId)
     {
-        uint256 roll = uint256(cardSeed) % BPS_DENOM;
-        uint8 rarity;
-        if (roll < W_COMMON) rarity = 0;
-        else if (roll < W_COMMON + W_RARE) rarity = 1;
-        else if (roll < W_COMMON + W_RARE + W_EPIC) rarity = 2;
-        else rarity = 3;
+        uint8 rarity = _rollRarity(cardSeed, position);
 
         // Starter positions 0..4 map 1:1 to Kit AF archetypes; K (5) reuses DB art until Kit adds a K slug
         uint8 rosterIdx = position < 5 ? position : 4;
 
-        // Ratings = SPD ARM HND TCK POW; scale with rarity (soft floors)
+        // Ratings = SPD ARM HND TCK POW; floor/span from Spec; position tilts which stats land high
         uint8 floor_ = 40 + rarity * 12; // Common 40 … Legend 76
         uint8 span = 20 + rarity * 4;
+        uint8 half = span / 2;
+        if (half == 0) half = 1;
+        uint8[5] memory tilt = _statTilt(position);
         uint8[5] memory ratings;
         for (uint256 r = 0; r < 5; r++) {
             uint256 rv = uint256(keccak256(abi.encodePacked(cardSeed, "stat", r)));
-            ratings[r] = uint8(floor_ + (rv % span));
-            if (ratings[r] > 99) ratings[r] = 99;
+            uint8 t = tilt[r];
+            uint8 rolled;
+            if (t == 2) {
+                // high half of span
+                rolled = uint8(floor_ + half + (rv % (span - half)));
+            } else if (t == 0) {
+                // low half
+                rolled = uint8(floor_ + (rv % half));
+            } else {
+                rolled = uint8(floor_ + (rv % span));
+            }
+            if (rolled > 99) rolled = 99;
+            ratings[r] = rolled;
         }
 
         string memory playerName = rosterNames[rosterIdx];
-        // Kit layout: /art/player-{slug}.png
+        // Kit layout: /art/player-{slug}.png (rarity chrome via frame overlay until Kit variants land)
         string memory uri = string.concat(baseUri, "player-", rosterSlugs[rosterIdx], ".png");
 
         tokenId = cards.mint(to, playerName, uri, position, rarity, season, ratings);

@@ -352,6 +352,25 @@
   },
   {
     "type": "function",
+    "name": "rarityWeights",
+    "inputs": [
+      {
+        "name": "position",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "w",
+        "type": "uint16[4]",
+        "internalType": "uint16[4]"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
     "name": "reveal",
     "inputs": [
       {

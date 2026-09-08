@@ -36,6 +36,8 @@ export const IMPACT_WEIGHTS = {
 export type MatchSide = 'you' | 'them' | 'neutral'
 
 /** AF event — tick = sequential drive/phase index; quarter 1–4 (0 = KO/HT/FINAL). */
+export type MatchAnim = 'idle' | 'run' | 'action' | 'celebrate'
+
 export interface MatchEvent {
   tick: number
   quarter: number
@@ -46,6 +48,9 @@ export interface MatchEvent {
   /** Football points added this tick (TD=6, FG=3, XP=1); for live scoreboard */
   youPts?: number
   themPts?: number
+  /** PlayerCardItem.slug when YOU side names an actor */
+  actorSlug?: string
+  anim?: MatchAnim
 }
 
 export interface MatchResult {
@@ -165,15 +170,30 @@ export function deriveStrength(lineup: PlayerCardItem[]): TeamStrength {
   }
 }
 
+function pickCard(
+  lineup: PlayerCardItem[],
+  prefer: PlayerCardItem['position'][],
+  rnd: () => number,
+): PlayerCardItem | null {
+  const preferred = lineup.filter((c) => prefer.includes(c.position))
+  const pool = preferred.length ? preferred : lineup
+  if (!pool.length) return null
+  return pool[Math.floor(rnd() * pool.length)]!
+}
+
 function pickName(
   lineup: PlayerCardItem[],
   prefer: PlayerCardItem['position'][],
   rnd: () => number,
 ): string {
-  const preferred = lineup.filter((c) => prefer.includes(c.position))
-  const pool = preferred.length ? preferred : lineup
-  if (!pool.length) return 'a squad mate'
-  return pool[Math.floor(rnd() * pool.length)]!.name
+  return pickCard(lineup, prefer, rnd)?.name ?? 'a squad mate'
+}
+
+type ActorMeta = { actorSlug?: string; anim?: MatchAnim }
+
+function youActor(card: PlayerCardItem | null, anim: MatchAnim): ActorMeta {
+  if (!card) return { anim }
+  return { actorSlug: card.slug, anim }
 }
 
 function cpuStrength(you: TeamStrength, rnd: () => number): TeamStrength {
@@ -304,6 +324,7 @@ export function simulateMatch(
     side: MatchSide,
     text: string,
     pts?: { you?: number; them?: number },
+    actor?: ActorMeta,
   ) => {
     tick += 1
     events.push({
@@ -314,6 +335,8 @@ export function simulateMatch(
       text,
       youPts: pts?.you,
       themPts: pts?.them,
+      actorSlug: actor?.actorSlug,
+      anim: actor?.anim ?? (actor?.actorSlug ? 'idle' : side === 'neutral' ? 'idle' : undefined),
     })
   }
 
@@ -324,6 +347,8 @@ export function simulateMatch(
     `Kickoff — Your 5 (OVR ${you.ovr}) vs Neon Rivals (OVR ${them.ovr}) · focus ${focus.toUpperCase()}${
       impacts.length ? ` · ${impacts.length} Impacts` : ''
     }`,
+    undefined,
+    { anim: 'idle' },
   )
 
   // 2 drives per quarter → 8 play ticks + KO/HT/FINAL ≈ 11 events
@@ -346,7 +371,7 @@ export function simulateMatch(
 
   for (const drive of drives) {
     if (!halfInserted && drive.quarter >= 3) {
-      push(0, 'HT', 'neutral', `Halftime ${scoreLine(youScore, themScore)} · ${MATCH_HONESTY}`)
+      push(0, 'HT', 'neutral', `Halftime ${scoreLine(youScore, themScore)} · ${MATCH_HONESTY}`, undefined, { anim: 'idle' })
       halfInserted = true
     }
 
@@ -364,21 +389,32 @@ export function simulateMatch(
         rnd,
         clock: drive.clock,
         quarter: drive.quarter,
-        onScore: (pts, text, side) => {
+        onScore: (pts, text, side, actor) => {
           if (side === 'you') {
             youScore += pts
-            push(drive.quarter, drive.clock, 'you', `${text} — ${scoreLine(youScore, themScore)}`, {
-              you: pts,
-            })
+            push(
+              drive.quarter,
+              drive.clock,
+              'you',
+              `${text} — ${scoreLine(youScore, themScore)}`,
+              { you: pts },
+              actor,
+            )
           } else {
-            // defensive score (INT/scoop rare) — treat as them
+            // defensive score (INT/scoop rare) — treat as them; no YOU slug
             themScore += pts
-            push(drive.quarter, drive.clock, 'them', `${text} — ${scoreLine(youScore, themScore)}`, {
-              them: pts,
-            })
+            push(
+              drive.quarter,
+              drive.clock,
+              'them',
+              `${text} — ${scoreLine(youScore, themScore)}`,
+              { them: pts },
+              { anim: actor?.anim ?? 'idle' },
+            )
           }
         },
-        onEvent: (side, text) => push(drive.quarter, drive.clock, side, text),
+        onEvent: (side, text, actor) =>
+          push(drive.quarter, drive.clock, side, text, undefined, actor),
       })
     } else {
       resolveDefense({
@@ -392,17 +428,23 @@ export function simulateMatch(
         redzone: drive.redzone,
         onScore: (pts, text) => {
           themScore += pts
-          push(drive.quarter, drive.clock, 'them', `${text} — ${scoreLine(youScore, themScore)}`, {
-            them: pts,
-          })
+          push(
+            drive.quarter,
+            drive.clock,
+            'them',
+            `${text} — ${scoreLine(youScore, themScore)}`,
+            { them: pts },
+            { anim: 'idle' },
+          )
         },
-        onEvent: (side, text) => push(drive.quarter, drive.clock, side, text),
+        onEvent: (side, text, actor) =>
+          push(drive.quarter, drive.clock, side, text, undefined, actor),
       })
     }
   }
 
   if (!halfInserted) {
-    push(0, 'HT', 'neutral', `Halftime ${scoreLine(youScore, themScore)} · ${MATCH_HONESTY}`)
+    push(0, 'HT', 'neutral', `Halftime ${scoreLine(youScore, themScore)} · ${MATCH_HONESTY}`, undefined, { anim: 'idle' })
   }
 
   const winner: MatchResult['winner'] =
@@ -415,7 +457,7 @@ export function simulateMatch(
         ? `Final ${scoreLine(youScore, themScore)} — Neon Rivals edge it · ${MATCH_HONESTY}`
         : `Final ${scoreLine(youScore, themScore)} — DRAW · ${MATCH_HONESTY}`
 
-  push(0, 'FINAL', 'neutral', ftLine)
+  push(0, 'FINAL', 'neutral', ftLine, undefined, { anim: 'idle' })
 
   return {
     youScore,
@@ -440,8 +482,8 @@ interface OffenseCtx {
   rnd: () => number
   clock: string
   quarter: number
-  onScore: (pts: number, text: string, side: 'you' | 'them') => void
-  onEvent: (side: MatchSide, text: string) => void
+  onScore: (pts: number, text: string, side: 'you' | 'them', actor?: ActorMeta) => void
+  onEvent: (side: MatchSide, text: string, actor?: ActorMeta) => void
 }
 
 function resolveOffense(ctx: OffenseCtx) {
@@ -454,26 +496,33 @@ function resolveOffense(ctx: OffenseCtx) {
     let p = clamp01((press - wall + 16) / 52 + mods.runConv + mods.midConv * 0.35 + (rnd() * 0.1 - 0.05))
     if (redzone) p = clamp01(p + mods.rzTd + mods.shortTd * 0.5 + mods.fg * 0.2)
 
-    const runner = pickName(lineup, ['SKILL', 'LINE_O', 'QB'], rnd)
+    const runnerCard = pickCard(lineup, ['SKILL', 'LINE_O', 'QB'], rnd)
+    const runner = runnerCard?.name ?? 'a squad mate'
     const roll = rnd()
 
     if (redzone && roll < p * 0.42 + mods.shortTd) {
-      onScore(TD_PTS + XP_PTS, `TD! ${runner} power plunge (+${TD_PTS}+XP)`, 'you')
+      onScore(TD_PTS + XP_PTS, `TD! ${runner} power plunge (+${TD_PTS}+XP)`, 'you', youActor(runnerCard, 'celebrate'))
     } else if (redzone && roll < p * 0.42 + mods.shortTd + 0.22 + mods.fg) {
-      const kicker = pickName(lineup, ['K', 'QB', 'SKILL'], rnd)
+      const kickerCard = pickCard(lineup, ['K', 'QB', 'SKILL'], rnd)
+      const kicker = kickerCard?.name ?? 'a squad mate'
       if (rnd() < 0.72 + mods.fg) {
-        onScore(FG_PTS, `FG GOOD — ${kicker} from the hash (+${FG_PTS})`, 'you')
+        onScore(FG_PTS, `FG GOOD — ${kicker} from the hash (+${FG_PTS})`, 'you', youActor(kickerCard, 'action'))
       } else {
-        onEvent('you', `FG miss — ${kicker} pushes it wide`)
+        onEvent('you', `FG miss — ${kicker} pushes it wide`, youActor(kickerCard, 'action'))
       }
     } else if (roll < p * 0.55) {
-      onScore(TD_PTS + XP_PTS, `TD! ${runner} breaks contain (+${TD_PTS}+XP)`, 'you')
+      onScore(TD_PTS + XP_PTS, `TD! ${runner} breaks contain (+${TD_PTS}+XP)`, 'you', youActor(runnerCard, 'celebrate'))
     } else if (roll < p) {
-      onEvent('you', `${runner} churns a first down`)
+      onEvent('you', `${runner} churns a first down`, youActor(runnerCard, 'run'))
     } else if (roll < p + 0.28) {
-      onEvent('them', `Neon Rivals stuff the rush — ${runner} buried`)
+      onEvent('them', `Neon Rivals stuff the rush — ${runner} buried`, { anim: 'idle' })
     } else {
-      onEvent('you', `${pickName(lineup, ['LINE_O'], rnd)} wins the trench; drive stalls → punt`)
+      const lineCard = pickCard(lineup, ['LINE_O'], rnd)
+      onEvent(
+        'you',
+        `${lineCard?.name ?? 'a squad mate'} wins the trench; drive stalls → punt`,
+        youActor(lineCard, 'run'),
+      )
     }
     return
   }
@@ -486,41 +535,54 @@ function resolveOffense(ctx: OffenseCtx) {
   )
   if (redzone) p = clamp01(p + mods.rzTd + mods.fg * 0.25)
 
-  const qb = pickName(lineup, ['QB'], rnd)
-  const skill = pickName(lineup, ['SKILL', 'QB'], rnd)
+  const qbCard = pickCard(lineup, ['QB'], rnd)
+  const skillCard = pickCard(lineup, ['SKILL', 'QB'], rnd)
+  const qb = qbCard?.name ?? 'a squad mate'
+  const skill = skillCard?.name ?? 'a squad mate'
   const roll = rnd()
 
   // Hot-read / quick game first
   if (roll < mods.quick * 0.55) {
-    onEvent('you', `HOT READ — ${qb} hits ${skill} on the slant`)
+    onEvent('you', `HOT READ — ${qb} hits ${skill} on the slant`, youActor(skillCard, 'action'))
     if (rnd() < 0.35 + mods.passConv) {
-      onScore(TD_PTS + XP_PTS, `TD! ${skill} walks in after the catch (+${TD_PTS}+XP)`, 'you')
+      onScore(
+        TD_PTS + XP_PTS,
+        `TD! ${skill} walks in after the catch (+${TD_PTS}+XP)`,
+        'you',
+        youActor(skillCard, 'celebrate'),
+      )
     }
     return
   }
 
   if (redzone && roll < 0.2 + mods.fg) {
-    const kicker = pickName(lineup, ['K', 'QB'], rnd)
+    const kickerCard = pickCard(lineup, ['K', 'QB'], rnd)
+    const kicker = kickerCard?.name ?? 'a squad mate'
     if (rnd() < 0.7 + mods.fg) {
-      onScore(FG_PTS, `FG GOOD — ${kicker} chips it through (+${FG_PTS})`, 'you')
+      onScore(FG_PTS, `FG GOOD — ${kicker} chips it through (+${FG_PTS})`, 'you', youActor(kickerCard, 'action'))
     } else {
-      onEvent('you', `FG miss — ${kicker} hooks left`)
+      onEvent('you', `FG miss — ${kicker} hooks left`, youActor(kickerCard, 'action'))
     }
     return
   }
 
   if (roll < p * 0.35 + mods.longTd) {
-    onScore(TD_PTS + XP_PTS, `TD! ${qb} → ${skill} deep ball (+${TD_PTS}+XP)`, 'you')
+    onScore(
+      TD_PTS + XP_PTS,
+      `TD! ${qb} → ${skill} deep ball (+${TD_PTS}+XP)`,
+      'you',
+      youActor(skillCard, 'celebrate'),
+    )
   } else if (roll < p * 0.55 + mods.longTd * 0.3) {
-    onEvent('you', `Big catch — ${skill} snags it from ${qb}`)
+    onEvent('you', `Big catch — ${skill} snags it from ${qb}`, youActor(skillCard, 'action'))
   } else if (roll < p) {
-    onEvent('you', `${qb} finds ${skill} for a chunk gain`)
+    onEvent('you', `${qb} finds ${skill} for a chunk gain`, youActor(qbCard, 'action'))
   } else if (roll < p + 0.18) {
-    onEvent('them', `INT! Neon Rivals pick ${qb}`)
+    onEvent('them', `INT! Neon Rivals pick ${qb}`, { anim: 'idle' })
   } else if (roll < p + 0.35) {
-    onEvent('them', `Neon Rivals sack ${qb}`)
+    onEvent('them', `Neon Rivals sack ${qb}`, { anim: 'idle' })
   } else {
-    onEvent('you', `${qb} checks down; drive stalls → punt`)
+    onEvent('you', `${qb} checks down; drive stalls → punt`, youActor(qbCard, 'run'))
   }
 }
 
@@ -534,7 +596,7 @@ interface DefenseCtx {
   quarter: number
   redzone: boolean
   onScore: (pts: number, text: string) => void
-  onEvent: (side: MatchSide, text: string) => void
+  onEvent: (side: MatchSide, text: string, actor?: ActorMeta) => void
 }
 
 function resolveDefense(ctx: DefenseCtx) {
@@ -544,17 +606,19 @@ function resolveDefense(ctx: DefenseCtx) {
   let p = clamp01((press - wall + 14) / 52 - mods.sack * 0.35 + (rnd() * 0.1 - 0.05))
   if (redzone) p = clamp01(p + 0.06)
 
-  const db = pickName(lineup, ['DB', 'LINE_D'], rnd)
-  const rush = pickName(lineup, ['LINE_D', 'DB'], rnd)
+  const dbCard = pickCard(lineup, ['DB', 'LINE_D'], rnd)
+  const rushCard = pickCard(lineup, ['LINE_D', 'DB'], rnd)
+  const db = dbCard?.name ?? 'a squad mate'
+  const rush = rushCard?.name ?? 'a squad mate'
   const roll = rnd()
 
   if (roll < mods.sack + 0.08) {
-    onEvent('you', `SACK — ${rush} blows up the pocket`)
+    onEvent('you', `SACK — ${rush} blows up the pocket`, youActor(rushCard, 'action'))
     return
   }
 
   if (roll < mods.sack + 0.08 + 0.12 + mods.defPress * 0.4) {
-    onEvent('you', `INT! ${db} undercuts the route`)
+    onEvent('you', `INT! ${db} undercuts the route`, youActor(dbCard, 'action'))
     return
   }
 
@@ -562,14 +626,14 @@ function resolveDefense(ctx: DefenseCtx) {
     onScore(TD_PTS + XP_PTS, `Neon Rivals TD in the red zone (+${TD_PTS}+XP)`)
   } else if (redzone && roll < p * 0.4 + 0.2) {
     if (rnd() < 0.65) onScore(FG_PTS, `Neon Rivals FG GOOD (+${FG_PTS})`)
-    else onEvent('you', `${db} tips the kick — FG miss`)
+    else onEvent('you', `${db} tips the kick — FG miss`, youActor(dbCard, 'action'))
   } else if (roll < p * 0.5) {
     onScore(TD_PTS + XP_PTS, `Neon Rivals punch in a TD (+${TD_PTS}+XP)`)
   } else if (roll < p) {
-    onEvent('them', `Rival big catch downfield`)
+    onEvent('them', `Rival big catch downfield`, { anim: 'idle' })
   } else if (roll < p + 0.28) {
-    onEvent('you', `${rush} stuffs the rush`)
+    onEvent('you', `${rush} stuffs the rush`, youActor(rushCard, 'action'))
   } else {
-    onEvent('neutral', `Neon Rivals punt — field flips`)
+    onEvent('neutral', `Neon Rivals punt — field flips`, { anim: 'idle' })
   }
 }

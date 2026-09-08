@@ -54,3 +54,11 @@ See SPEC_CARDS.md §12b. Short form:
 - Starter pack playable; Kit AF reissue
 - No attrition / chemistry
 - Parallel mock AF; Mint enum before pack testnet; Reviewer before broadcast
+
+## Roster note (2026-09-07 late)
+Arena Chat reseated **Reviewer** (Playbook out) for CardPack security gate.
+Pak locked **pixel** (not voxel) gameplay anims for each AF player; Kit owns sheets under `web/public/art/sprites/{slug}/`; Pitch wires MatchPlay.
+
+## Backlog locks (Pak 2026-09-07 late)
+- **Rarity per position:** every AF position (QB…K) can roll Common→Legend; publish weights; chase Legends per slot so rips feel juicy (beyond global rarity-only).
+- **Marketplace:** AFTER table-done (Reviewer clear → pack testnet → rip/inventory/equip/anim playable). Spec already said “tradeable on any RH marketplace later” — own `/market` or external RH marketplace TBD.
